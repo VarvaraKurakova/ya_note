@@ -1,70 +1,48 @@
-import pytest
 from http import HTTPStatus
-
-from django.urls import reverse
-
+import pytest
 from pytest_django.asserts import assertRedirects
 
-# from notes.models import Note
-
-
-@pytest.mark.parametrize(
-    'name',
-    ('notes:home', 'users:login', 'users:logout', 'users:signup')
+HOMEPAGE = pytest.lazy_fixture('homepage_url')
+REGISTER = pytest.lazy_fixture('register_url')
+LOGIN = pytest.lazy_fixture('login_url')
+LOGOUT = pytest.lazy_fixture('logout_url')
+NEWS_DETAIL = pytest.lazy_fixture('news_detail_url')
+EDIT_COMMENT = pytest.lazy_fixture('edit_comment_url')
+DELETE_COMMENT = pytest.lazy_fixture('delete_comment_url')
+CLIENT = pytest.lazy_fixture('client')
+AUTHOR_CLIENT = pytest.lazy_fixture('author_client')
+READER_CLIENT = pytest.lazy_fixture('reader_client')
+DELETE_COMMENT_REDIRECT_URL = pytest.lazy_fixture(
+    'delete_comment_redirect_url'
 )
-def test_pages_availability_for_anonymous_user(client, name):
-    url = reverse(name)
-    response = client.get(url)
-    assert response.status_code == HTTPStatus.OK
+EDIT_COMMENT_REDIRECT_URL = pytest.lazy_fixture('edit_comment_redirect_url')
+
+pytestmark = pytest.mark.django_db
 
 
 @pytest.mark.parametrize(
-    'name',
-    ('notes:list', 'notes:add', 'notes:success')
-)
-def test_pages_availability_for_auth_user(not_author_client, name):
-    url = reverse(name)
-    response = not_author_client.get(url)
-    assert response.status_code == HTTPStatus.OK
-
-
-@pytest.mark.parametrize(
-    'parametrized_client, expected_status',
-    # Предварительно оборачиваем имена фикстур
-    # в вызов функции pytest.lazy_fixture().
+    'url, expected_url',
     (
-        (pytest.lazy_fixture('not_author_client'), HTTPStatus.NOT_FOUND),
-        (pytest.lazy_fixture('author_client'), HTTPStatus.OK)
-    ),
-)
-@pytest.mark.parametrize(
-    'name',
-    ('notes:detail', 'notes:edit', 'notes:delete'),
-)
-def test_pages_availability_for_different_users(
-        parametrized_client, name, note, expected_status
-):
-    url = reverse(name, args=(note.slug,))
-    response = parametrized_client.get(url)
-    assert response.status_code == expected_status
+        (DELETE_COMMENT, DELETE_COMMENT_REDIRECT_URL),
+        (EDIT_COMMENT, EDIT_COMMENT_REDIRECT_URL)
+    ))
+def test_edit_delete_comment_anonymous(client, url, expected_url):
+    assertRedirects(client.get(url), expected_url)
 
 
 @pytest.mark.parametrize(
-    'name, args',
+    'url, parametrized_client, expected_status',
     (
-        ('notes:detail', pytest.lazy_fixture('slug_for_args')),
-        ('notes:edit', pytest.lazy_fixture('slug_for_args')),
-        ('notes:delete', pytest.lazy_fixture('slug_for_args')),
-        ('notes:add', None),
-        ('notes:success', None),
-        ('notes:list', None),
-    ),
+        (HOMEPAGE, CLIENT, HTTPStatus.OK),
+        (REGISTER, CLIENT, HTTPStatus.OK),
+        (LOGIN, CLIENT, HTTPStatus.OK),
+        (LOGOUT, CLIENT, HTTPStatus.OK),
+        (NEWS_DETAIL, CLIENT, HTTPStatus.OK),
+        (DELETE_COMMENT, AUTHOR_CLIENT, HTTPStatus.OK),
+        (DELETE_COMMENT, READER_CLIENT, HTTPStatus.NOT_FOUND),
+        (EDIT_COMMENT, AUTHOR_CLIENT, HTTPStatus.OK),
+        (EDIT_COMMENT, READER_CLIENT, HTTPStatus.NOT_FOUND)
+    )
 )
-# Передаём в тест анонимный клиент, name проверяемых страниц и args:
-def test_redirects(client, name, args):
-    login_url = reverse('users:login')
-    # Теперь не надо писать никаких if и можно обойтись одним выражением.
-    url = reverse(name, args=args)
-    expected_url = f'{login_url}?next={url}'
-    response = client.get(url)
-    assertRedirects(response, expected_url)
+def test_all(url, parametrized_client, expected_status):
+    assert parametrized_client.get(url).status_code == expected_status

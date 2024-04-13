@@ -1,53 +1,43 @@
+from http import HTTPStatus
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
-from django.urls import reverse
 
-from notes.models import Note
 from notes.forms import NoteForm
-
+from notes.models import Note
+from .shared_test_input import SharedTestInput
+from .shared_urls import (
+    NOTE_LIST_URL,
+    NOTES_ADD_URL,
+    NOTES_EDIT_URL,
+)
 
 User = get_user_model()
 
 
-class TestHomePage(TestCase):
-    HOME_URL = reverse('notes:home')
-
+class Notelistpage(SharedTestInput):
     @classmethod
-    def setUpTestData(cls):
-        cls.author = User.objects.create(username='user01')
-        cls.another_author = User.objects.create(username='user02')
-        cls.author_note = Note.objects.create(
-            title='Заголовок01',
-            text='Текст01',
-            slug='slug',
-            author=cls.author)
-        cls.url_list = reverse('notes:list')
+    def setUpTestData(
+        cls,
+    ):
+        super().setUpTestData(generate_single_note=True)
 
-    def test_note_in_object_list(self):
-        self.client.force_login(self.author)
-        response = self.client.get(self.url_list)
-        self.assertIn('object_list', response.context)
-        self.assertIsInstance(response.context['object_list'][0], Note)
+    def test_notes_list_display(self):
+        self.assertIn(self.note, self.client_author.get(
+            NOTE_LIST_URL).context['object_list'])
+        matching_note = Note.objects.get(id=self.note.id)
+        self.assertEqual(self.note.title, matching_note.title)
+        self.assertEqual(self.note.text, matching_note.text)
+        self.assertEqual(self.note.author, matching_note.author)
+        self.assertEqual(self.note.slug, matching_note.slug)
 
-    def test_note_access_only_for_author(self):
-        note_status = (
-            (self.author, True),
-            (self.another_author, False)
-        )
-        for user, expected_note_in_list in note_status:
-            self.client.force_login(user)
-            response = self.client.get(self.url_list)
-            note_in_list = self.author_note in response.context['object_list']
-            self.assertEqual(note_in_list, expected_note_in_list)
+    def test_user_cant_see_others_notes(self):
+        response = self.client_another.get(NOTE_LIST_URL)
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertNotIn(self.note, response.context['object_list'])
 
-    def test_edit_and_delete_pages_have_form(self):
-        urls = (
-            ('notes:add', None),
-            ('notes:edit', (self.author_note.slug,))
-        )
-        self.client.force_login(self.author)
-        for name, args in urls:
-            url = reverse(name, args=args)
-            response = self.client.get(url)
-            self.assertIn('form', response.context)
-            self.assertIsInstance(response.context['form'], NoteForm)
+    def test_create_edit_page(self):
+        for url in (NOTES_ADD_URL, NOTES_EDIT_URL):
+            with self.subTest(url=url):
+                response = self.client_author.get(url)
+                self.assertIn('form', response.context)
+                self.assertIsInstance(response.context['form'], NoteForm)

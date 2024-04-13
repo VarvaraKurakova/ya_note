@@ -1,49 +1,39 @@
-# test_content.py
 import pytest
 
-from django.urls import reverse
+from news.forms import CommentForm
+from yanews.settings import NEWS_COUNT_ON_HOME_PAGE
 
-from notes.forms import NoteForm
+pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.parametrize(
-    # Задаём названия для параметров:
-    'parametrized_client, note_in_list',
-    (
-        # Передаём фикстуры в параметры при помощи "ленивых фикстур":
-        (pytest.lazy_fixture('author_client'), True),
-        (pytest.lazy_fixture('not_author_client'), False),
+def test_news_per_page(client, multiple_news_samples, homepage_url):
+    assert (
+        client.get(homepage_url).context['object_list'].count()
+        == NEWS_COUNT_ON_HOME_PAGE
     )
-)
-def test_notes_list_for_different_users(
-        # Используем фикстуру заметки и параметры из декоратора:
-        note, parametrized_client, note_in_list
-):
-    url = reverse('notes:list')
-    # Выполняем запрос от имени параметризованного клиента:
-    response = parametrized_client.get(url)
-    object_list = response.context['object_list']
-    # Проверяем истинность утверждения "заметка есть в списке":
-    assert (note in object_list) is note_in_list
 
 
-@pytest.mark.parametrize(
-    # В качестве параметров передаём name и args для reverse.
-    'name, args',
-    (
-        # Для тестирования страницы создания заметки
-        # никакие дополнительные аргументы для reverse() не нужны.
-        ('notes:add', None),
-        # Для тестирования страницы редактирования заметки нужен slug заметки.
-        ('notes:edit', pytest.lazy_fixture('slug_for_args'))
+def test_news_order(client, homepage_url):
+    object_list = client.get(homepage_url).context['object_list']
+    all_dates = [news.date for news in object_list]
+    sorted_dates = sorted(all_dates, reverse=True)
+    assert all_dates == sorted_dates
+
+
+def test_comments_order(client, news_detail_url):
+    all_comments = client.get(
+        news_detail_url).context['news'].comment_set.all()
+    sorted_comments = sorted(
+        all_comments, key=lambda x: x.created
     )
-)
-def test_pages_contains_form(author_client, name, args):
-    # Формируем URL.
-    url = reverse(name, args=args)
-    # Запрашиваем нужную страницу:
-    response = author_client.get(url)
-    # Проверяем, есть ли объект формы в словаре контекста:
-    assert 'form' in response.context
-    # Проверяем, что объект формы относится к нужному классу.
-    assert isinstance(response.context['form'], NoteForm)
+    assert list(all_comments) == sorted_comments
+
+
+def test_anonymous_client_has_no_form(client, news_detail_url):
+    assert 'form' not in client.get(news_detail_url).context
+
+
+def test_authorized_client_has_form(author_client, news_detail_url):
+    context = author_client.get(news_detail_url).context
+    assert 'form' in context
+    assert isinstance(context['form'], CommentForm)
