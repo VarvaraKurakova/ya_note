@@ -97,9 +97,11 @@ class TestNoteEditDelete(TestCase):
         notes_count = Note.objects.count()
         self.assertEqual(notes_count, 0)
 
-
     def test_user_cant_edit_note_of_another_author(self):
-        response = self.another_author_client.post(self.edit_url, data=self.form_data)
+        response = self.another_author_client.post(
+            self.edit_url,
+            data=self.form_data
+        )
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
         self.note.refresh_from_db()
         self.assertEqual(self.note.text, self.NOTE_TEXT)

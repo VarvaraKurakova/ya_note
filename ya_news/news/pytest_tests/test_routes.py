@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from pytest_django.asserts import assertRedirects
 
-from notes.models import Note
+# from notes.models import Note
 
 
 @pytest.mark.parametrize(
@@ -30,7 +30,7 @@ def test_pages_availability_for_auth_user(not_author_client, name):
 
 @pytest.mark.parametrize(
     'parametrized_client, expected_status',
-    # Предварительно оборачиваем имена фикстур 
+    # Предварительно оборачиваем имена фикстур
     # в вызов функции pytest.lazy_fixture().
     (
         (pytest.lazy_fixture('not_author_client'), HTTPStatus.NOT_FOUND),
@@ -67,4 +67,4 @@ def test_redirects(client, name, args):
     url = reverse(name, args=args)
     expected_url = f'{login_url}?next={url}'
     response = client.get(url)
-    assertRedirects(response, expected_url) 
+    assertRedirects(response, expected_url)
