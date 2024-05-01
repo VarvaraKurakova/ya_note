@@ -1,33 +1,23 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+from django.conf import settings
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 import pytest
 
 from news.models import News, Comment
-from yanews.settings import NEWS_COUNT_ON_HOME_PAGE
 
 
 # URLS
 @pytest.fixture
-def homepage_url():
+def home_url():
     return reverse('news:home')
 
 
 @pytest.fixture
-def news_detail_url(news_sample):
-    return reverse('news:detail', args=(news_sample.id,))
-
-
-@pytest.fixture
-def login_url():
-    return reverse('users:login')
-
-
-@pytest.fixture
-def edit_comment_url(comment):
-    return reverse('news:edit', args=(comment.id,))
+def detail_url(news):
+    return reverse('news:detail', args=(news.id,))
 
 
 @pytest.fixture
@@ -36,8 +26,13 @@ def delete_comment_url(comment):
 
 
 @pytest.fixture
-def register_url():
-    return reverse('users:signup')
+def edit_comment_url(comment):
+    return reverse('news:edit', args=(comment.id,))
+
+
+@pytest.fixture
+def login_url():
+    return reverse('users:login')
 
 
 @pytest.fixture
@@ -46,24 +41,66 @@ def logout_url():
 
 
 @pytest.fixture
-def base_url(login_url):
-    return f'{login_url}?next='
+def sign_up_url():
+    return reverse('users:signup')
 
 
 @pytest.fixture
-def delete_comment_redirect_url(base_url, delete_comment_url):
-    return f"{base_url}{delete_comment_url}"
+def comment(news, author):
+    comment = Comment.objects.create(
+        news=news,
+        author=author,
+        text='Текст'
+    )
+    return comment
 
 
 @pytest.fixture
-def edit_comment_redirect_url(base_url, edit_comment_url):
-    return f"{base_url}{edit_comment_url}"
+def all_comments(news, author):
+    for index in range(10):
+        Comment.objects.create(
+            news=news, author=author, text=f'Tекст {index}',
+        )
 
 
-# Users and clients
+@pytest.fixture
+def form_data():
+    return {
+        'text': 'Новый текст',
+    }
+
+
+@pytest.fixture
+def news():
+    news = News.objects.create(
+        title='Заголовок',
+        text='Текст'
+    )
+    return news
+
+
+@pytest.fixture
+def all_news():
+    today = timezone.now()
+    all_news = [
+        News(
+            title=f'Новость {index}',
+            text='Просто текст.',
+            date=today - timedelta(days=index)
+        )
+        for index in range(settings.NEWS_COUNT_ON_HOME_PAGE + 1)
+    ]
+    News.objects.bulk_create(all_news)
+
+
 @pytest.fixture
 def author(django_user_model):
     return django_user_model.objects.create(username='Автор')
+
+
+@pytest.fixture
+def not_author(django_user_model):
+    return django_user_model.objects.create(username='Не автор')
 
 
 @pytest.fixture
@@ -74,55 +111,7 @@ def author_client(author):
 
 
 @pytest.fixture
-def reader(django_user_model):
-    return django_user_model.objects.create(username='Читатель')
-
-
-@pytest.fixture
-def reader_client(reader):
+def not_author_client(not_author):
     client = Client()
-    client.force_login(reader)
+    client.force_login(not_author)
     return client
-
-
-# Instances and their attributes
-@pytest.fixture
-def news_sample():
-    return News.objects.create(
-        title='Новость 1',
-        text='Текст новости 1'
-    )
-
-
-@pytest.fixture
-def comment(author, news_sample):
-    return Comment.objects.create(
-        author=author,
-        text='Текст комментария тест',
-        news=news_sample,
-    )
-
-
-@pytest.fixture
-def multiple_news_samples():
-    News.objects.bulk_create(News(
-        title=f'Новость {i}',
-        text=f'Текст новости {i}',
-        date=datetime.today() - timedelta(days=i),
-    )
-        for i in range(
-        0 + 1, NEWS_COUNT_ON_HOME_PAGE
-        + 1 + 1)
-    )
-
-
-@pytest.fixture
-def multiple_comments(author, news_sample):
-    Comment.objects.create(
-        Comment(
-            author=author,
-            text=f'Текст комментария {i+1}',
-            created_at=timezone.now() + timedelta(days=i + 1),
-            news=news_sample
-        )for i in range(222)
-    )

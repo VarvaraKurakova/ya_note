@@ -1,48 +1,59 @@
 from http import HTTPStatus
-import pytest
-from pytest_django.asserts import assertRedirects
 
-HOMEPAGE = pytest.lazy_fixture('homepage_url')
-REGISTER = pytest.lazy_fixture('register_url')
-LOGIN = pytest.lazy_fixture('login_url')
-LOGOUT = pytest.lazy_fixture('logout_url')
-NEWS_DETAIL = pytest.lazy_fixture('news_detail_url')
-EDIT_COMMENT = pytest.lazy_fixture('edit_comment_url')
-DELETE_COMMENT = pytest.lazy_fixture('delete_comment_url')
-CLIENT = pytest.lazy_fixture('client')
-AUTHOR_CLIENT = pytest.lazy_fixture('author_client')
-READER_CLIENT = pytest.lazy_fixture('reader_client')
-DELETE_COMMENT_REDIRECT_URL = pytest.lazy_fixture(
-    'delete_comment_redirect_url'
-)
-EDIT_COMMENT_REDIRECT_URL = pytest.lazy_fixture('edit_comment_redirect_url')
+from django.test import TestCase
+from django.urls import reverse
+from django.contrib.auth import get_user_model
 
-pytestmark = pytest.mark.django_db
+from news.models import News, Comment
+
+User = get_user_model()
 
 
-@pytest.mark.parametrize(
-    'url, expected_url',
-    (
-        (DELETE_COMMENT, DELETE_COMMENT_REDIRECT_URL),
-        (EDIT_COMMENT, EDIT_COMMENT_REDIRECT_URL)
-    ))
-def test_edit_delete_comment_anonymous(client, url, expected_url):
-    assertRedirects(client.get(url), expected_url)
+class TestRoutes(TestCase):
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.news = News.objects.create(title='Заголовок', text='Текст')
+        cls.author = User.objects.create(username='Лев Толстой')
+        cls.reader = User.objects.create(username='Читатель простой')
+        cls.comment = Comment.objects.create(
+            news=cls.news,
+            author=cls.author,
+            text='Текст комментария'
+        )
 
-@pytest.mark.parametrize(
-    'url, parametrized_client, expected_status',
-    (
-        (HOMEPAGE, CLIENT, HTTPStatus.OK),
-        (REGISTER, CLIENT, HTTPStatus.OK),
-        (LOGIN, CLIENT, HTTPStatus.OK),
-        (LOGOUT, CLIENT, HTTPStatus.OK),
-        (NEWS_DETAIL, CLIENT, HTTPStatus.OK),
-        (DELETE_COMMENT, AUTHOR_CLIENT, HTTPStatus.OK),
-        (DELETE_COMMENT, READER_CLIENT, HTTPStatus.NOT_FOUND),
-        (EDIT_COMMENT, AUTHOR_CLIENT, HTTPStatus.OK),
-        (EDIT_COMMENT, READER_CLIENT, HTTPStatus.NOT_FOUND)
-    )
-)
-def test_all(url, parametrized_client, expected_status):
-    assert parametrized_client.get(url).status_code == expected_status
+    def test_pages_availability(self):
+        urls = (
+            ('news:home', None),
+            ('news:detail', (self.news.id,)),
+            ('users:login', None),
+            ('users:logout', None),
+            ('users:signup', None),
+        )
+        for name, args in urls:
+            with self.subTest(name=name):
+                url = reverse(name, args=args)
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, HTTPStatus.OK)
+
+    def test_availability_for_comment_edit_and_delete(self):
+        users_statuses = (
+            (self.author, HTTPStatus.OK),
+            (self.reader, HTTPStatus.NOT_FOUND),
+        )
+        for user, status in users_statuses:
+            self.client.force_login(user)
+            for name in ('news:edit', 'news:delete'):
+                with self.subTest(user=user, name=name):
+                    url = reverse(name, args=(self.comment.id,))
+                    response = self.client.get(url)
+                    self.assertEqual(response.status_code, status)
+
+    def test_redirect_for_anonymous_client(self):
+        login_url = reverse('users:login')
+        for name in ('news:edit', 'news:delete'):
+            with self.subTest(name=name):
+                url = reverse(name, args=(self.comment.id,))
+                redirect_url = f'{login_url}?next={url}'
+                response = self.client.get(url)
+                self.assertRedirects(response, redirect_url)
